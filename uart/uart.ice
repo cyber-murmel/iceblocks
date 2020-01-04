@@ -12,6 +12,18 @@
     "graph": {
       "blocks": [
         {
+          "id": "f1d139f6-26ac-4ca9-a1f2-ec6baa9047f1",
+          "type": "basic.output",
+          "data": {
+            "name": "BSY",
+            "virtual": true
+          },
+          "position": {
+            "x": 1064,
+            "y": 280
+          }
+        },
+        {
           "id": "5d826bc8-ee5a-48df-b4ff-3d8457a83c92",
           "type": "basic.output",
           "data": {
@@ -50,27 +62,15 @@
           }
         },
         {
-          "id": "f1d139f6-26ac-4ca9-a1f2-ec6baa9047f1",
-          "type": "basic.output",
-          "data": {
-            "name": "BSY",
-            "virtual": true
-          },
-          "position": {
-            "x": 1064,
-            "y": 472
-          }
-        },
-        {
-          "id": "0774b54f-9ceb-4ffd-ac2b-6cb1873d61c6",
+          "id": "c90820fb-6047-46d8-a6c9-48e4ce4723ed",
           "type": "basic.input",
           "data": {
-            "name": "",
+            "name": "CLK",
             "pins": [
               {
                 "index": "0",
-                "name": "",
-                "value": ""
+                "name": "CLK",
+                "value": "35"
               }
             ],
             "virtual": true,
@@ -336,7 +336,7 @@
         },
         {
           "source": {
-            "block": "0774b54f-9ceb-4ffd-ac2b-6cb1873d61c6",
+            "block": "c90820fb-6047-46d8-a6c9-48e4ce4723ed",
             "port": "out"
           },
           "target": {
@@ -346,7 +346,7 @@
         },
         {
           "source": {
-            "block": "0774b54f-9ceb-4ffd-ac2b-6cb1873d61c6",
+            "block": "c90820fb-6047-46d8-a6c9-48e4ce4723ed",
             "port": "out"
           },
           "target": {
@@ -356,7 +356,7 @@
           "vertices": [
             {
               "x": 712,
-              "y": 552
+              "y": 536
             }
           ]
         }
@@ -504,7 +504,7 @@
               "id": "93ca839a-bc5e-4c35-b092-5abdd935ef4b",
               "type": "basic.code",
               "data": {
-                "code": "/* Normally you would use enums here, but\n * for some reasons I can't use enums.\n */\n\nparameter\n  IDLE      = 1'b0,\n  TRANSMIT  = 1'b1;\n  \nparameter TICKS_PER_BIT = $rtoi(F_CLK/BAUD);\n\nreg [($bits(TICKS_PER_BIT)-1):0] timer;\ninitial timer = TICKS_PER_BIT;\n\nreg [1:0] state;\ninitial state = IDLE;\n\nreg busy, tx;\ninitial busy = 0;\ninitial tx = 1;\n\nreg [(N_BITS-1+2):0] buffer;\nreg [($bits(N_BITS))-1:0] bit_idx;\ninitial bit_idx = 0;\n\nalways @(posedge CLK) begin\n  case (state)\n    IDLE: begin\n      if (1 == TRIG) begin\n        busy <= 1;                      // tell the world we are busy\n        buffer <= {1'b1, DATA[(N_BITS-1):0], 1'b0};   // add start and stop bit\n        bit_idx <= 0;                   // reset bit index\n        timer <= TICKS_PER_BIT;         // reset timer\n        state <= TRANSMIT;              // change state to start bit\n      end\n    end\n    TRANSMIT: begin\n      if ((N_BITS+2) == bit_idx) begin\n        timer <= TICKS_PER_BIT;         // reset timer\n        state <= IDLE;                  // change state\n        busy <= 0;\n        /* perform entry transition of stop bit */\n      end else if (1 == timer) begin\n        timer <= TICKS_PER_BIT;\n        tx <= buffer[bit_idx];\n        bit_idx <= bit_idx + 1;\n      end else begin\n        timer <= timer-1;\n      end\n    end\n  endcase\nend\n\nassign BSY = busy;\nassign TX = tx;",
+                "code": "/* Normally you would use enums here, but\n * for some reasons I can't use enums.\n */\n\nparameter\n  IDLE      = 1'b0,\n  TRANSMIT  = 1'b1;\n  \nparameter TICKS_PER_BIT = $rtoi(F_CLK/BAUD);\n\nreg [($bits(TICKS_PER_BIT)-1):0] timer;\ninitial timer = TICKS_PER_BIT;\n\nreg [1:0] state;\ninitial state = IDLE;\n\nreg busy, tx;\ninitial busy = 0;\ninitial tx = 1;\n\nreg [(N_BITS+2-1):0] buffer;    // we need space for start and stop bit\nreg [($bits(N_BITS))-1:0] bit_idx;\ninitial bit_idx = 0;\n\nalways @(posedge CLK) begin\n  case (state)\n    IDLE: begin\n      if (1 == TRIG) begin\n        busy <= 1;  // tell the world we are busy\n        buffer <= {1'b1, DATA[(N_BITS-1):0], 1'b0}; // add start and stop bit\n        bit_idx <= 0;   // reset bit index\n        timer <= TICKS_PER_BIT; // reset timer\n        state <= TRANSMIT;  // change state to transmit\n      end\n    end\n    TRANSMIT: begin\n      if (1 == timer) begin // if timer ran out\n        if ((N_BITS+2) > bit_idx) begin // if not all bits have been sent\n          tx <= buffer[bit_idx];    // apply bit to outgoing singal\n          bit_idx <= bit_idx + 1;   // increment bit index\n          timer <= TICKS_PER_BIT;   // reset timer\n        end else begin\n          state <= IDLE;    // change state\n          busy <= 0;  // tell the world we are ready\n        end\n      end else begin\n        timer <= timer-1;\n      end\n    end\n  endcase\nend\n\nassign BSY = busy;\nassign TX = tx;",
                 "params": [
                   {
                     "name": "BAUD"
@@ -790,7 +790,7 @@
               "id": "19ff476b-1964-4469-8bf6-6a660046850e",
               "type": "basic.code",
               "data": {
-                "code": "/* Normally you would use enums here, but\n * for some reasons I can't use enums.\n */\n\nparameter TICKS_PER_BIT = $rtoi(F_CLK/BAUD);\n\nparameter\n  IDLE      = 1'b0,\n  RECEIVE   = 1'b1;\n\nreg [($bits(TICKS_PER_BIT)-1):0] timer;\ninitial timer = TICKS_PER_BIT;\n\nreg [1:0] state;\ninitial state = IDLE;\n\nreg irq, rx;\ninitial irq = 0;\ninitial rx = 1;\n\nreg [(N_BITS-1)+2:0] buffer, data;\nreg [($bits(N_BITS))-1:0] bit_idx;\ninitial bit_idx = 0;\n\nalways @(posedge CLK)\n  rx <= RX;\n\nalways @(posedge CLK) begin\n  case (state)\n    IDLE: begin\n      if (0 == rx) begin                // start condition\n        buffer <= 0;                    // reset input buffer\n        bit_idx <= 0;                   // reset bit index\n        timer <= TICKS_PER_BIT>>1;       // sample in the middle of the signal\n        state <= RECEIVE;               // change state to start bit\n      end\n      irq <= 0;\n    end\n    RECEIVE: begin\n      if ((N_BITS+2) == bit_idx) begin\n        timer <= TICKS_PER_BIT;         // reset timer\n        state <= IDLE;                  // change state\n        if ((0 == buffer[0]) & (1 == buffer[N_BITS+1])) begin\n          irq <= 1;\n          data <= buffer[N_BITS:1];\n        end\n      end else if (1 == timer) begin\n        buffer[bit_idx] <= rx;\n        timer <= TICKS_PER_BIT;\n        bit_idx <= bit_idx + 1;\n      end else begin\n        timer <= timer-1;\n      end\n    end\n  endcase\nend\n\nassign IRQ = irq;\nassign DATA = data;",
+                "code": "/* Normally you would use enums here, but\n * for some reasons I can't use enums.\n */\n\nparameter TICKS_PER_BIT = $rtoi(F_CLK/BAUD);\n\nparameter\n  IDLE      = 1'b0,\n  RECEIVE   = 1'b1;\n\nreg [($bits(TICKS_PER_BIT)-1):0] timer;\ninitial timer = TICKS_PER_BIT;\n\nreg [1:0] state;\ninitial state = IDLE;\n\nreg irq, rx;\ninitial irq = 0;\ninitial rx = 1;\n\nreg [(N_BITS-1):0] buffer, data;\nreg [($bits(N_BITS))-1:0] bit_idx;\ninitial bit_idx = 0;\n\nalways @(posedge CLK)\n  rx <= RX;                             // filter out metastability\n\nalways @(posedge CLK) begin\n  case (state)\n    IDLE: begin\n      if (0 == rx) begin                // start condition\n        buffer <= 0;                    // reset input buffer\n        bit_idx <= 0;                   // reset bit index\n        timer <= TICKS_PER_BIT>>1;      // start sampling in the middle of the signal\n        state <= RECEIVE;               // change state to start bit\n      end\n      irq <= 0;\n    end\n    RECEIVE: begin\n      if (1 >= timer) begin\n        if ((N_BITS+1) > bit_idx) begin // collect every bit from start to stop\n          if ((0 == bit_idx) & (1 == rx)) begin // start bit is not 0 -> glitch\n            state <= IDLE;  // go back to idle\n          end else begin    // start bit was ok\n            buffer[bit_idx-1] <= rx;    // transfer bit into buffer\n          end\n          bit_idx <= bit_idx + 1;   // increment bit index\n        end else begin  // if all bits are collected\n          state <= IDLE;    // change state\n          if (1 == rx) begin // if stop bit are correct\n            irq <= 1;   // notify world of new received message\n            data[N_BITS-1:0] <= buffer;   // copy message to output. omit start and stop bit\n          end\n        end\n        timer <= TICKS_PER_BIT; // reset timer\n      end else begin\n        timer <= timer-1;\n      end\n    end\n  endcase\nend\n\nassign IRQ = irq;\nassign DATA = data;",
                 "params": [
                   {
                     "name": "BAUD"
